@@ -26,9 +26,8 @@ public class Main {
         Metadata metadata = book.getMetadata();
         metadata.addTitle(downloader.title());
         metadata.addAuthor(new Author("Wikipedia", "http://www.wikipedia.org"));
-        //book.getResources().addAll(downloader.css());
-        book.getResources().addAll(downloader.images());
         book.addSection(downloader.title(), downloader.content());
+        //book.getResources().addAll(downloader.css());
         String file = downloader.title() + ".epub";
         new EpubWriter().write(book, new FileOutputStream(file));
     }

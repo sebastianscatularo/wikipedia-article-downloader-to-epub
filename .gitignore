@@ -1,3 +1,4 @@
+*.epub
 # Created by .ignore support plugin (hsz.mobi)
 ### Java template
 *.class
@@ -68,3 +69,5 @@ crashlytics.properties
 crashlytics-build.properties
 fabric.properties
 
+.idea/
+wikipedia-article-downloader.iml

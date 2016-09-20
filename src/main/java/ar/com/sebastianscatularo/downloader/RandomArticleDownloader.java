@@ -4,41 +4,47 @@ import nl.siegmann.epublib.domain.Resource;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
-import org.jsoup.parser.Tag;
+import org.jsoup.nodes.Node;
 import org.jsoup.select.Elements;
 
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.MalformedURLException;
 import java.net.URI;
-import java.nio.file.Path;
-import java.nio.file.Paths;
+import java.net.URL;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
-import java.util.Optional;
-import java.util.function.Function;
 import java.util.stream.Collectors;
 
 /**
  * @author sebastianscatularo@gmail.com.
  */
 public class RandomArticleDownloader {
-    private static final String PRINTABLE = "/w/index.php?title=%s&printable=yes";
     private static final String RANDOM_ARTICLE_URL = "/wiki/Special:Random";
-    private final URI printableArticleUri;
     private final Document article;
     private final String base;
 
     public RandomArticleDownloader(String base) throws IOException {
         this.base = base;
         String title = Jsoup.connect(randomArticle()).get().location().replace("https://es.wikipedia.org/wiki/", "");
-        this.article = Jsoup.connect(printableArticle(title)).get();
-        this.printableArticleUri = URI.create(printableArticle(title));
+        article = Jsoup.connect(printableArticle(title)).get();
+        List<Element> elements = new ArrayList<>();
+        elements.addAll(article.select(".noprint"));
+        elements.addAll(article.select(".suggestions"));
+        elements.addAll(article.select("script"));
+        elements.add(article.getElementById("jump-to-nav"));
+        elements.add(article.getElementById("mw-navigation"));
+        elements.add(article.getElementById("mw-normal-catlinks"));
+        elements.add(article.getElementById("mw-hidden-catlinks"));
+        elements.add(article.getElementById("footer-places-mobileview"));
+        elements.stream().filter(element -> element != null).forEach(Node::remove);
+        //article.head().select("link[rel=stylesheet]").remove();
+        new ImageProcessor(this.article).execute();
     }
 
     private String printableArticle(String title) {
-        return base.concat(String.format(PRINTABLE, title));
+        return base.concat("/w/index.php?title=").concat(title).concat("&printable=yes");
     }
 
     private String randomArticle() {
@@ -51,17 +57,25 @@ public class RandomArticleDownloader {
 
     public Collection<Resource> css() throws IOException {
         Elements elements = article.head().select("link[rel=stylesheet]");
-        List<Resource> resources = new ArrayList<>();
-        int inc = 0;
-        for (Element element : elements) {
-            InputStream stream = newInputStream(URI.create(base + element.attr("href")));
-            String name = String.valueOf(inc++).concat(".css");
-            element.replaceWith(new Element(Tag.valueOf(String.format("<link rel=\"stylesheet\" href=\"%s\">", name)), ""));
-            resources.add(new Resource(stream, name));
-        }
-        return resources;
+        return elements.stream()
+                .map(element -> {
+                    try{
+                        URI uri = URI.create(element.absUrl("href"));
+                        URL url = uri.toURL();
+                        String file = url.getFile();
+                        return new Resource(url.openStream(), file);
+                    } catch (MalformedURLException ex) {
+                        ex.printStackTrace();
+                        return null;
+                    } catch (IOException e) {
+                        e.printStackTrace();
+                        return null;
+                    }
+                })
+                .filter(element -> element != null)
+                .collect(Collectors.toList());
     }
-
+/*
     private InputStream newInputStream(URI href) throws IOException {
         return href.toURL().openConnection().getInputStream();
     }
@@ -94,7 +108,7 @@ public class RandomArticleDownloader {
         }
         return resources;
     }
-
+*/
     public Resource content() {
         return new Resource(article.html().getBytes(), article.title().concat(".html"));
     }
