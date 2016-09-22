@@ -5,25 +5,29 @@ import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
 import org.jsoup.nodes.Node;
-import org.jsoup.select.Elements;
 
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.net.MalformedURLException;
 import java.net.URI;
-import java.net.URL;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
+import java.util.UUID;
 import java.util.stream.Collectors;
 
 /**
  * @author sebastianscatularo@gmail.com.
  */
 public class RandomArticleDownloader {
+    private static final Resource EMPTY = new Resource("empty");
     private static final String RANDOM_ARTICLE_URL = "/wiki/Special:Random";
     private final Document article;
+    private final Collection<Resource> css;
+    private final Collection<Resource> images;
+    private final InputStream contentStream;
     private final String base;
+    private final String fileName;
 
     public RandomArticleDownloader(String base) throws IOException {
         this.base = base;
@@ -39,8 +43,52 @@ public class RandomArticleDownloader {
         elements.add(article.getElementById("mw-hidden-catlinks"));
         elements.add(article.getElementById("footer-places-mobileview"));
         elements.stream().filter(element -> element != null).forEach(Node::remove);
-        //article.head().select("link[rel=stylesheet]").remove();
-        new ImageProcessor(this.article).execute();
+
+        css = article.head().select("link")
+                .stream()
+                .map(element -> {
+                    try {
+                        if (!"stylesheet".equals(element.attr("rel"))) {
+                            element.remove();
+                            return EMPTY;
+                        } else {
+                            String src = element.absUrl("href");
+                            String uuid = UUID.randomUUID().toString().concat(".css");
+                            InputStream stream = URI.create(src).toURL().openStream();
+                            Resource resource = new Resource(stream, uuid);
+                            resource.setId(uuid);
+                            element.attr("href", uuid);
+                            return resource;
+                        }
+                    } catch (IOException ex) {
+                        ex.printStackTrace();
+                        return EMPTY;
+                    }
+                })
+                .filter(element -> !EMPTY.equals(element))
+                .collect(Collectors.toList());
+
+        images = article.body().select("img")
+                .stream()
+                .map(element -> {
+                    try {
+                        String src = element.absUrl("src");
+                        String uuid = UUID.randomUUID().toString().concat(".png");
+                        InputStream stream = URI.create(src).toURL().openStream();
+                        Resource resource = new Resource(stream, uuid);
+                        resource.setId(uuid);
+                        element.attr("src", uuid);
+                        return resource;
+                    } catch (IOException ex) {
+                        ex.printStackTrace();
+                        return EMPTY;
+                    }
+                })
+                .filter(element -> !EMPTY.equals(element))
+                .collect(Collectors.toList());
+
+        contentStream = new ByteArrayInputStream(article.html().getBytes());
+        fileName = article.title().concat(".html");
     }
 
     private String printableArticle(String title) {
@@ -55,61 +103,21 @@ public class RandomArticleDownloader {
         return article.title();
     }
 
-    public Collection<Resource> css() throws IOException {
-        Elements elements = article.head().select("link[rel=stylesheet]");
-        return elements.stream()
-                .map(element -> {
-                    try{
-                        URI uri = URI.create(element.absUrl("href"));
-                        URL url = uri.toURL();
-                        String file = url.getFile();
-                        return new Resource(url.openStream(), file);
-                    } catch (MalformedURLException ex) {
-                        ex.printStackTrace();
-                        return null;
-                    } catch (IOException e) {
-                        e.printStackTrace();
-                        return null;
-                    }
-                })
-                .filter(element -> element != null)
-                .collect(Collectors.toList());
-    }
-/*
-    private InputStream newInputStream(URI href) throws IOException {
-        return href.toURL().openConnection().getInputStream();
+    public Resource content() throws IOException {
+        return newResource(contentStream, fileName);
     }
 
-    public Collection<Resource> images() throws IOException {
-        Elements elements = article.body().select("img");
-        List<Resource> resources = new ArrayList<>();
-        int id = 0;
-        try {
-            for (Element e : elements) {
-                String src = e.absUrl("src");
-                if (src.contains("Special:CentralAutoLogin")) {
-                    continue;
-                }
-                Path path = Paths.get(e.attr("src"));
-                InputStream inputStream = URI.create(src).toURL().openConnection().getInputStream();
-                Resource resource = new Resource(inputStream, path.toString());
-                resource.setId(String.valueOf(id++));
-                resources.add(resource);
-            }
-            article.select("img").forEach(element -> {
-                if (element.attr("src").startsWith("//")) {
-                    element.attr("src", element.attr("src").replaceFirst("//", ""));
-                } else if (element.attr("src").startsWith("/")) {
-                    element.attr("src", element.attr("src").replaceFirst("/", ""));
-                }
-            });
-        } catch (IllegalArgumentException e) {
-            e.printStackTrace();
-        }
-        return resources;
+    public Collection<Resource> images() {
+        return images;
     }
-*/
-    public Resource content() {
-        return new Resource(article.html().getBytes(), article.title().concat(".html"));
+
+    public Collection<Resource> css() {
+        return css;
+    }
+
+    private Resource newResource(InputStream stream, String href) throws IOException {
+        Resource resource = new Resource(stream, href);
+        resource.setId(UUID.randomUUID().toString());
+        return resource;
     }
 }
