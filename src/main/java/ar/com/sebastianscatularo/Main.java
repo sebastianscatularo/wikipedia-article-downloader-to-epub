@@ -7,6 +7,11 @@ import nl.siegmann.epublib.domain.Metadata;
 import nl.siegmann.epublib.epub.EpubWriter;
 
 import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.OutputStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.Random;
 
 /**
@@ -23,12 +28,21 @@ public class Main {
         book.addSection(downloader.title(), downloader.content());
         book.getResources().addAll(downloader.css());
         book.getResources().addAll(downloader.images());
-        String file = downloader.title() + ".epub";
-        new EpubWriter().write(book, new FileOutputStream(file));
+        OutputStream stream = Files.newOutputStream(file(downloader.title()));
+        new EpubWriter().write(book, stream);
     }
 
     public static String getRandom(String[] array) {
         int rnd = new Random().nextInt(array.length);
         return array[rnd];
+    }
+
+    private static Path file(String title) throws IOException {
+        String home = System.getProperty("user.home");
+        Path wikipedia = Paths.get(home, "Wikipedia");
+        if (Files.notExists(wikipedia)) {
+            Files.createDirectory(wikipedia);
+        }
+        return Paths.get(home, "Wikipedia", title.concat(".epub"));
     }
 }
