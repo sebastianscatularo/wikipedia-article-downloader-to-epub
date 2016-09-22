@@ -31,7 +31,7 @@ public class RandomArticleDownloader {
 
     public RandomArticleDownloader(String base) throws IOException {
         this.base = base;
-        String title = Jsoup.connect(randomArticle()).get().location().replace("https://es.wikipedia.org/wiki/", "");
+        String title = Jsoup.connect(randomArticle()).get().location().replace(base.concat("/wiki/"), "");
         article = Jsoup.connect(printableArticle(title)).get();
         List<Element> elements = new ArrayList<>();
         elements.addAll(article.select(".noprint"));
